@@ -6,6 +6,6 @@ Simple calculator. Write simple formula in `main()` function inside `main.rs` an
 
 ```
 fn main() {
-    let s = "(1 + 2*(20 -10))*2+(1+2)/3";
+    let s = "(1.1 + 2*(20 -10))*2+(1+2)/3";
     ...
 ```
