@@ -1,5 +1,3 @@
-use std::sync::mpsc::channel;
-
 fn main() {
     let s = "(1.1 + 2*(20 -10))*2+(1+2)/3";
 
