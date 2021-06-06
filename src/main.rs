@@ -1,6 +1,7 @@
-fn main() {
+use std::sync::mpsc::channel;
 
-    let s = "(1 + 2*(20 -10))*2+(1+2)/3";
+fn main() {
+    let s = "(1.1 + 2*(20 -10))*2+(1+2)/3";
 
     let tokens = tokenize(s);
     let result = consolidate_all(tokens);
@@ -102,7 +103,7 @@ fn next_token(input: &str, start: usize) -> (Option<Token>, usize) {
     let mut result = String::new();
     let slice: &str = &input[start..];
     for (index, char) in slice.chars().enumerate() {
-        if char.is_numeric() {
+        if char.is_numeric() || char == POINT {
             result.push(char);
             continue;
         }
@@ -122,7 +123,7 @@ fn next_token(input: &str, start: usize) -> (Option<Token>, usize) {
 
 #[derive(Clone)]
 enum Token {
-    NUMBER { value: i32 },
+    NUMBER { value: f64 },
     PLUS,
     MINUS,
     MULTIPLICATION,
@@ -156,7 +157,7 @@ impl Token {
 
     fn from_string(string: &str) -> Token {
         match string {
-            c if c.chars().all(char::is_numeric) => Token::NUMBER { value: c.to_string().parse::<i32>().unwrap() },
+            c if c.chars().all(|it| { it.is_numeric() || it == POINT }) => Token::NUMBER { value: c.to_string().parse::<f64>().unwrap() },
             PLUS => Token::PLUS,
             MINUS => Token::MINUS,
             MULTIPLICATION => Token::MULTIPLICATION,
@@ -172,7 +173,7 @@ impl Token {
 impl Token {
     fn calculate(&self) -> f64 {
         return match self {
-            Token::NUMBER { value } => f64::from(*value),
+            Token::NUMBER { value } => value.clone(),
             Token::COMPLEX { operation, op1, op2 } => {
                 match *operation.clone() {
                     Token::PLUS => op1.calculate() + op2.calculate(),
@@ -196,6 +197,7 @@ const PRODUCT: &str = "^";
 const EMPTY: &str = "";
 const OPEN: &str = "(";
 const CLOSE: &str = ")";
+const POINT: char = '.';
 
 #[macro_export]
 macro_rules! consolidate_predicate {
