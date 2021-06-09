@@ -1,3 +1,7 @@
+use crate::functions::Function;
+use crate::tokens::Token::Unary;
+use std::fmt;
+
 #[derive(Clone)]
 pub enum Token {
     Number { value: f64 },
@@ -9,31 +13,35 @@ pub enum Token {
     Product,
     OpenBracket,
     CloseBracket,
-    Unary { operation: String, op1: Box<Token> },
+    Unary { operation: Function, op1: Box<Token> },
     Binary { operation: Box<Token>, op1: Box<Token>, op2: Box<Token> },
     Unknown,
 }
 
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_string())
+    }
+}
+
 impl Token {
-    pub fn to_string(&self) -> String {
-        let result = match self {
+    fn to_string(&self) -> String {
+        return match self {
+            Token::Add => PLUS.to_string(),
             Token::Number { value } => value.to_string(),
             Token::Function { value } => value.clone(),
-            Token::Add => PLUS.to_string(),
             Token::Subtract => MINUS.to_string(),
             Token::Multiplication => MULTIPLICATION.to_string(),
             Token::Divide => DIVIDE.to_string(),
             Token::Product => PRODUCT.to_string(),
-            Token::Unary { operation, op1 } => format!("{}({})", operation, &*op1.to_string()),
+            Token::Unary { operation, op1 } => format!("{}({})", operation, &*op1),
             Token::OpenBracket => OPEN.to_string(),
             Token::CloseBracket => CLOSE.to_string(),
             Token::Binary { operation, op1, op2 } => {
-                format!("({}{}{})", &*op1.to_string(), &*operation.to_string(), &*op2.to_string())
+                format!("({}{}{})", &*op1, &*operation, &*op2)
             }
             Token::Unknown => EMPTY.to_string(),
         };
-
-        return result;
     }
 
     pub fn from_string(string: &str) -> Token {
@@ -50,9 +58,14 @@ impl Token {
             _ => Token::Unknown
         }
     }
-}
 
-impl Token {
+    pub fn make_unary(&self, op1: Token) -> Token {
+        match self {
+            Token::Function { value } => Token::Unary { operation: Function::from_string(value), op1: Box::new(op1) },
+            _ => panic!("Unary operation can only be made from Function.")
+        }
+    }
+
     pub fn calculate(&self) -> f64 {
         return match self {
             Token::Number { value } => value.clone(),
@@ -66,19 +79,19 @@ impl Token {
                     _ => panic!("Wrong operation"),
                 }
             }
-            Token::Unary { operation, op1 } => op1.calculate().sin(),
-            _ => panic!("I can calculate only COMPLEX")
+            Token::Unary { operation, op1 } => operation.calculate(op1.calculate()),
+            _ => panic!("I can't calculate this")
         };
     }
 }
 
-pub const PLUS: &str = "+";
-pub const MINUS: &str = "-";
-pub const MULTIPLICATION: &str = "*";
-pub const DIVIDE: &str = "/";
-pub const PRODUCT: &str = "^";
-pub const EMPTY: &str = "";
-pub const OPEN: &str = "(";
-pub const CLOSE: &str = ")";
+const PLUS: &str = "+";
+const MINUS: &str = "-";
+const MULTIPLICATION: &str = "*";
+const DIVIDE: &str = "/";
+const PRODUCT: &str = "^";
+const EMPTY: &str = "";
+const OPEN: &str = "(";
+const CLOSE: &str = ")";
 
 pub const POINT: char = '.';

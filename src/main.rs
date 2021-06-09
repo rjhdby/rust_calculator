@@ -1,12 +1,14 @@
 use crate::tokens::*;
+use crate::tokens::Token::Function;
+
+mod functions;
 mod tokens;
 
 fn main() {
-    let s = "sin(2)";
-
+    let s = "123*ln(10)/(3-7)+15^2*sin(3)";
     let result = consolidate_all(&tokenize(s));
 
-    print!("{} = {}", result.to_string(), result.calculate())
+    print!("{} = {}", result, result.calculate())
 }
 
 fn tokenize(input: &str) -> Vec<Token> {
@@ -89,7 +91,7 @@ fn consolidate<F>(tokens: &Vec<Token>, predicate: F) -> Vec<Token> where F: Fn(&
             it if predicate(it) => {
                 let next: Token = (tokens.get(token.0 + 1).unwrap()).clone();
                 let binary = match &it {
-                    Token::Function { value } => Token::Unary { operation: value.clone(), op1: Box::new(next) },
+                    Token::Function { .. } => it.make_unary(next),
                     _ => {
                         let previous = out.pop().unwrap();
                         Token::Binary { operation: Box::new(current.clone()), op1: Box::new(previous), op2: Box::new(next) }
