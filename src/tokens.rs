@@ -1,6 +1,6 @@
-use crate::functions::Function;
-use crate::tokens::Token::Unary;
 use std::fmt;
+
+use crate::functions::Function;
 
 #[derive(Clone)]
 pub enum Token {
@@ -46,7 +46,7 @@ impl Token {
 
     pub fn from_string(string: &str) -> Token {
         match string {
-            c if c.chars().all(|it| { it.is_numeric() || it == POINT }) => Token::Number { value: c.to_string().parse::<f64>().unwrap() },
+            c if is_exp_float(c) => Token::Number { value: c.to_string().parse::<f64>().unwrap() },
             c if c.chars().all(|it| { it.is_alphanumeric() }) => Token::Function { value: c.to_string() },
             PLUS => Token::Add,
             MINUS => Token::Subtract,
@@ -59,9 +59,9 @@ impl Token {
         }
     }
 
-    pub fn make_unary(&self, op1: Token) -> Token {
+    pub fn make_unary(&self, op1: &Token) -> Token {
         match self {
-            Token::Function { value } => Token::Unary { operation: Function::from_string(value), op1: Box::new(op1) },
+            Token::Function { value } => Token::Unary { operation: Function::from_string(value), op1: Box::new(op1.to_owned()) },
             _ => panic!("Unary operation can only be made from Function.")
         }
     }
@@ -85,6 +85,59 @@ impl Token {
     }
 }
 
+pub fn tokenize(input: &str) -> Vec<Token> {
+    let mut tokens: Vec<Token> = Vec::new();
+    let mut index = 0;
+
+    while let token = next_token(input, index) {
+        if token.0.is_none() {
+            break;
+        }
+        let value = token.0.unwrap();
+        index = token.1;
+        if matches!(value, Token::Unknown) {
+            continue;
+        }
+
+        println!("{}", value);
+        tokens.push(value);
+    }
+    return tokens;
+}
+
+fn next_token(input: &str, start: usize) -> (Option<Token>, usize) {
+    let mut exp = false;
+    let mut result = String::new();
+    let slice: &str = &input[start..];
+    for (index, char) in slice.chars().enumerate() {
+        if char.is_alphanumeric() || char == POINT {
+            if (char == 'e' || char == 'E') && result.chars().all(|it| { it.is_numeric() || it == POINT }) {
+                exp = true
+            }
+            if exp && result.chars().any(|it| { it.is_alphabetic() }) {
+                exp = false
+            }
+            result.push(char);
+            continue;
+        }
+        if char == '-' && exp {
+            result.push(char);
+            continue;
+        }
+        if !result.is_empty() {
+            return (Some(Token::from_string(&result[..])), start + index);
+        }
+
+        return (Some(Token::from_string(&char.to_string())), start + index + 1);
+    }
+
+    if !result.is_empty() {
+        return (Some(Token::from_string(&result[..])), input.len());
+    }
+
+    return (None, 0);
+}
+
 const PLUS: &str = "+";
 const MINUS: &str = "-";
 const MULTIPLICATION: &str = "*";
@@ -95,3 +148,11 @@ const OPEN: &str = "(";
 const CLOSE: &str = ")";
 
 pub const POINT: char = '.';
+
+fn is_numeric(char: char) -> bool {
+    return char == POINT || char.is_numeric();
+}
+
+fn is_exp_float(value: &str) -> bool {
+    return value.to_string().parse::<f64>().is_ok();
+}

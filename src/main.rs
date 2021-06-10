@@ -1,39 +1,19 @@
 use crate::tokens::*;
-use crate::tokens::Token::Function;
 
 mod functions;
 mod tokens;
 
 fn main() {
-    let s = "123*ln(10)/(3-7)+15^2*sin(3)";
+    let s = "123*ln(10)/(3-7)+15^2*sin(3) + 2e3 - 2E-3 + e-2";
+    // let s = "e-2";
     let result = consolidate_all(&tokenize(s));
 
     print!("{} = {}", result, result.calculate())
 }
 
-fn tokenize(input: &str) -> Vec<Token> {
-    let mut tokens: Vec<Token> = Vec::new();
-    let mut index = 0;
-
-    while let token = next_token(input, index) {
-        if token.0.is_none() {
-            break;
-        }
-        let value = token.0.unwrap();
-        index = token.1;
-        if matches!(value, Token::Unknown) {
-            continue;
-        }
-
-        tokens.push(value);
-    }
-
-    return tokens;
-}
-
 fn consolidate_all(tokens: &Vec<Token>) -> Token {
     let brackets = consolidate_brackets(tokens);
-    let unary = consolidate(&brackets, |it| { matches!(it, Token::Function{value}) });
+    let unary = consolidate(&brackets, |it| { matches!(it, Token::Function{..}) });
     let product = consolidate(&unary, consolidate_predicate!(Token::Product));
     let mult_div = consolidate(&product, consolidate_predicate!(Token::Divide, Token::Multiplication));
     return consolidate(&mult_div, consolidate_predicate!(Token::Add, Token::Subtract)).get(0).unwrap().clone();
@@ -87,47 +67,25 @@ fn consolidate<F>(tokens: &Vec<Token>, predicate: F) -> Vec<Token> where F: Fn(&
             continue;
         }
         let current: &Token = token.1;
-        match current {
-            it if predicate(it) => {
-                let next: Token = (tokens.get(token.0 + 1).unwrap()).clone();
-                let binary = match &it {
-                    Token::Function { .. } => it.make_unary(next),
-                    _ => {
-                        let previous = out.pop().unwrap();
-                        Token::Binary { operation: Box::new(current.clone()), op1: Box::new(previous), op2: Box::new(next) }
-                    }
-                };
 
-                out.push(binary);
-                skip = true
-            }
-            _ => out.push(current.clone()),
+        if predicate(current) {
+            let next: &Token = tokens.get(token.0 + 1).unwrap();
+            let operation = match &current {
+                Token::Function { .. } => current.make_unary(next),
+                _ => {
+                    let previous = out.pop().unwrap();
+                    Token::Binary { operation: Box::new(current.clone()), op1: Box::new(previous.clone()), op2: Box::new(next.clone()) }
+                }
+            };
+
+            out.push(operation);
+            skip = true
+        } else {
+            out.push(current.clone())
         }
     }
 
     return out;
-}
-
-fn next_token(input: &str, start: usize) -> (Option<Token>, usize) {
-    let mut result = String::new();
-    let slice: &str = &input[start..];
-    for (index, char) in slice.chars().enumerate() {
-        if char.is_alphanumeric() || char == POINT {
-            result.push(char);
-            continue;
-        }
-        if !result.is_empty() {
-            return (Some(Token::from_string(&result[..])), start + index);
-        }
-
-        return (Some(Token::from_string(&char.to_string())), start + index + 1);
-    }
-
-    if !result.is_empty() {
-        return (Some(Token::from_string(&result[..])), input.len());
-    }
-
-    return (None, 0);
 }
 
 #[macro_export]

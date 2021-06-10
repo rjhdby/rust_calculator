@@ -50,7 +50,7 @@ impl Function {
             Function::Ln => op1.ln(),
             Function::Log2 => op1.log2(),
             Function::Log10 => op1.log10(),
-            Function::Unknown { name } => panic!(format!("Unknown function: {}", name))
+            Function::Unknown { name } => panic!("Unknown function: {}", name)
         }
     }
 }
