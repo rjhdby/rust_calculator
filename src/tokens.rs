@@ -15,6 +15,7 @@ pub enum Token {
     CloseBracket,
     Unary { operation: Function, op1: Box<Token> },
     Binary { operation: Box<Token>, op1: Box<Token>, op2: Box<Token> },
+    Space,
     Unknown,
 }
 
@@ -41,6 +42,7 @@ impl Token {
                 format!("({}{}{})", &*op1, &*operation, &*op2)
             }
             Token::Unknown => EMPTY.to_string(),
+            Token::Space => SPACE.to_string()
         };
     }
 
@@ -99,7 +101,6 @@ pub fn tokenize(input: &str) -> Vec<Token> {
             continue;
         }
 
-        println!("{}", value);
         tokens.push(value);
     }
     return tokens;
@@ -110,6 +111,9 @@ fn next_token(input: &str, start: usize) -> (Option<Token>, usize) {
     let mut result = String::new();
     let slice: &str = &input[start..];
     for (index, char) in slice.chars().enumerate() {
+        if char == SPACE && result.is_empty() {
+            return (Some(Token::Space), start + index + 1);
+        }
         if char.is_alphanumeric() || char == POINT {
             if (char == 'e' || char == 'E') && result.chars().all(|it| { it.is_numeric() || it == POINT }) {
                 exp = true
@@ -138,6 +142,17 @@ fn next_token(input: &str, start: usize) -> (Option<Token>, usize) {
     return (None, 0);
 }
 
+pub fn cleanup(input: &Vec<Token>) -> Vec<Token> {
+    return input.into_iter()
+        .filter(|it| { !matches!(it, Token::Space) })
+        .map(|it| {it.clone()})
+        .collect::<Vec<_>>();
+}
+
+pub fn validate(input: &Vec<Token>) -> bool {
+    return true
+}
+
 const PLUS: &str = "+";
 const MINUS: &str = "-";
 const MULTIPLICATION: &str = "*";
@@ -148,10 +163,7 @@ const OPEN: &str = "(";
 const CLOSE: &str = ")";
 
 pub const POINT: char = '.';
-
-fn is_numeric(char: char) -> bool {
-    return char == POINT || char.is_numeric();
-}
+pub const SPACE: char = ' ';
 
 fn is_exp_float(value: &str) -> bool {
     return value.to_string().parse::<f64>().is_ok();
