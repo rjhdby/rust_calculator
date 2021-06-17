@@ -1,5 +1,4 @@
 use crate::token::tokenize;
-use std::panic::panic_any;
 use crate::ast::build_ast;
 use std::process::exit;
 

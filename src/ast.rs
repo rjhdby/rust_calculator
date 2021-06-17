@@ -1,7 +1,7 @@
 use std::fmt;
 
-use crate::token::Token;
 use crate::operation::Operation;
+use crate::token::Token;
 
 #[derive(Clone)]
 pub enum AstNode {
@@ -20,12 +20,8 @@ impl AstNode {
     pub fn to_string(&self) -> String {
         return match self {
             AstNode::Number { val } => val.to_string(),
-            AstNode::Unary { op, p1 } => {
-                op.pretty(p1.to_string(), None)
-            }
-            AstNode::Binary { op, p1, p2 } => {
-                op.pretty(p1.to_string(), Some(p2.to_string()))
-            }
+            AstNode::Unary { op, p1 } => op.pretty(p1.to_string(), None),
+            AstNode::Binary { op, p1, p2 } => op.pretty(p1.to_string(), Some(p2.to_string())),
         };
     }
 
@@ -44,53 +40,38 @@ pub fn build_ast(raw: &Vec<Token>) -> Result<AstNode, String> {
 
     for token in raw {
         match token {
-            Token::WhiteSpace { .. } => (),
+            Token::Number { pos: _, val } => operands.push(AstNode::Number { val: *val }),
             Token::Open { .. } => stack.push(Operation::Open),
             Token::Close { .. } => {
-                while let op = stack.pop().unwrap() {
-                    if matches!(op, Operation::Open) {
-                        break;
-                    }
-                    let op_right = operands.pop().unwrap();
-                    if op.operands() == 1 {
-                        operands.push(AstNode::Unary { op, p1: Box::new(op_right) })
-                    } else {
-                        let op_left = operands.pop().unwrap();
-                        operands.push(AstNode::Binary { op, p1: Box::new(op_left), p2: Box::new(op_right) })
-                    }
+                while !matches!(stack.last().unwrap(), Operation::Open) {
+                    make_node(&mut operands, stack.pop().unwrap());
                 };
+                stack.pop();
             }
-            Token::Number { pos, val } => operands.push(AstNode::Number { val: *val }),
-            Token::Operation { pos, val } => {
+            Token::Operation { pos: _, val } => {
                 while !stack.is_empty() && stack.last().unwrap().priority() >= val.priority() {
-                    let operation = stack.pop().unwrap();
-                    let op_right = operands.pop().unwrap();
-                    if operation.operands() == 1 {
-                        operands.push(AstNode::Unary { op: operation, p1: Box::new(op_right) })
-                    } else {
-                        let op_left = operands.pop().unwrap();
-                        operands.push(AstNode::Binary { op: operation, p1: Box::new(op_left), p2: Box::new(op_right) })
-                    }
+                    make_node(&mut operands, stack.pop().unwrap());
                 }
                 stack.push(val.clone())
             }
+            Token::WhiteSpace { .. } => (),
         }
     }
 
-    while let operation = stack.pop() {
-        if operation.is_none() {
-            break;
-        }
-        let op = operation.unwrap();
-        let op_right = operands.pop();
-        if op.operands() == 1 {
-            operands.push(AstNode::Unary { op, p1: Box::new(op_right.unwrap()) })
-        } else {
-            let op_left = operands.pop();
-            operands.push(AstNode::Binary { op, p1: Box::new(op_left.unwrap()), p2: Box::new(op_right.unwrap()) })
-        }
+    while stack.last().is_some() {
+        make_node(&mut operands, stack.pop().unwrap());
     };
 
     return Result::Ok(operands.pop().unwrap());
+}
+
+fn make_node(operands: &mut Vec<AstNode>, op: Operation) {
+    let op_right = operands.pop().unwrap();
+    if op.operands() == 1 {
+        operands.push(AstNode::Unary { op, p1: Box::new(op_right) })
+    } else {
+        let op_left = operands.pop();
+        operands.push(AstNode::Binary { op, p1: Box::new(op_left.unwrap()), p2: Box::new(op_right) })
+    }
 }
 
