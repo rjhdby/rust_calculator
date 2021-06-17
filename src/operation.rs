@@ -16,7 +16,6 @@ pub enum Operation {
     Negation,
 
     Open,
-    Close,
 }
 
 
@@ -34,17 +33,16 @@ impl Operation {
             Operation::Ln => String::from("ln"),
             Operation::Log2 => String::from("log2"),
             Operation::Log10 => String::from("log10"),
-            Operation::Negation => String::from("-"),
+            Operation::Negation => String::from("~"),
             Operation::Open => String::from("("),
-            Operation::Close => String::from(")"),
         };
     }
 
     pub fn pretty(&self, op1: String, op2: Option<String>) -> String {
         return match self {
-            Operation::Addition | Operation::Subtraction | Operation::Multiplication | Operation::Division | Operation::Product => format!("{} {} {}", op1, self.to_string(), op2.unwrap()),
+            Operation::Addition | Operation::Subtraction | Operation::Multiplication | Operation::Division | Operation::Product => format!("({}{}{})", op1, self.to_string(), op2.unwrap()),
             Operation::Negation => format!("(-{})", op1),
-            Operation::Open | Operation::Close => self.to_string(),
+            Operation::Open => self.to_string(),
             _ => format!("{}({})", self.to_string(), op1),
         };
     }
@@ -63,8 +61,7 @@ impl Operation {
             Operation::Log2 => 4,
             Operation::Log10 => 4,
             Operation::Negation => 4,
-            Operation::Open => 5,
-            Operation::Close => 5,
+            Operation::Open => 0,
         };
     }
 

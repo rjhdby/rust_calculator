@@ -1,8 +1,6 @@
 use std::fmt;
 
-use regex::Regex;
-
-use crate::dumb_token::DumbToken;
+use crate::token::Token;
 use crate::operation::Operation;
 
 #[derive(Clone)]
@@ -30,78 +28,69 @@ impl AstNode {
             }
         };
     }
+
+    pub fn calculate(&self) -> f64 {
+        return match self {
+            AstNode::Number { val } => *val,
+            AstNode::Unary { op, p1 } => op.calculate(p1.calculate(), None),
+            AstNode::Binary { op, p1, p2 } => op.calculate(p1.calculate(), Some(p2.calculate())),
+        };
+    }
 }
 
-pub fn build_ast(mut raw: &Vec<DumbToken>) -> Result<AstNode, String> {
-    let mut operators: Vec<Operation> = Vec::new();
+pub fn build_ast(raw: &Vec<Token>) -> Result<AstNode, String> {
+    let mut stack: Vec<Operation> = Vec::new();
     let mut operands: Vec<AstNode> = Vec::new();
 
     for token in raw {
         match token {
-            DumbToken::WhiteSpace { .. } => (),
-            DumbToken::Open { .. } => operators.push(Operation::Open),
-            DumbToken::Close { .. } => {
-                while let opr = operators.pop() {
-                    if opr.is_none() {
-                        println!("NONE: {}", operands.last().unwrap().to_string())
-                    }
-                    let op= opr.unwrap();
+            Token::WhiteSpace { .. } => (),
+            Token::Open { .. } => stack.push(Operation::Open),
+            Token::Close { .. } => {
+                while let op = stack.pop().unwrap() {
                     if matches!(op, Operation::Open) {
                         break;
                     }
-                    let op1 = operands.pop().unwrap();
+                    let op_right = operands.pop().unwrap();
                     if op.operands() == 1 {
-                        operands.push(AstNode::Unary { op, p1: Box::new(op1) })
+                        operands.push(AstNode::Unary { op, p1: Box::new(op_right) })
                     } else {
-                        let op2 = operands.pop().unwrap();
-                        operands.push(AstNode::Binary { op, p1: Box::new(op1), p2: Box::new(op2) })
+                        let op_left = operands.pop().unwrap();
+                        operands.push(AstNode::Binary { op, p1: Box::new(op_left), p2: Box::new(op_right) })
                     }
                 };
             }
-            DumbToken::Number { pos, val } => operands.push(AstNode::Number { val: *val }),
-            DumbToken::Operation { pos, val } => {
-                if operators.is_empty() || operators.last().unwrap().priority() < val.priority() {
-                    operators.push(val.clone())
-                } else {
-                    let operation = operators.pop().unwrap();
-                    let op1 = operands.pop().unwrap();
+            Token::Number { pos, val } => operands.push(AstNode::Number { val: *val }),
+            Token::Operation { pos, val } => {
+                while !stack.is_empty() && stack.last().unwrap().priority() >= val.priority() {
+                    let operation = stack.pop().unwrap();
+                    let op_right = operands.pop().unwrap();
                     if operation.operands() == 1 {
-                        operands.push(AstNode::Unary { op: operation, p1: Box::new(op1) })
+                        operands.push(AstNode::Unary { op: operation, p1: Box::new(op_right) })
                     } else {
-                        let op2 = operands.pop().unwrap();
-                        operands.push(AstNode::Binary { op: operation, p1: Box::new(op1), p2: Box::new(op2) })
+                        let op_left = operands.pop().unwrap();
+                        operands.push(AstNode::Binary { op: operation, p1: Box::new(op_left), p2: Box::new(op_right) })
                     }
                 }
+                stack.push(val.clone())
             }
         }
+    }
 
-    }
-    for l in &operands {
-        println!("{}", l)
-    }
-    while let operation = operators.pop() {
+    while let operation = stack.pop() {
         if operation.is_none() {
-            break
-        }
-        let op = operation.unwrap();
-        if matches!(op, Operation::Open) {
             break;
         }
-        let op1 = operands.pop();
-        if op1.is_none() {
-            print!("err3: {} ", op.to_string());
-            break
-        }
+        let op = operation.unwrap();
+        let op_right = operands.pop();
         if op.operands() == 1 {
-            operands.push(AstNode::Unary { op: op, p1: Box::new(op1.unwrap()) })
+            operands.push(AstNode::Unary { op, p1: Box::new(op_right.unwrap()) })
         } else {
-            let op2 = operands.pop();
-            if op2.is_none() {
-                print!("err4: {} ", op.to_string());
-                break
-            }
-            operands.push(AstNode::Binary { op: op, p1: Box::new(op1.unwrap()), p2: Box::new(op2.unwrap()) })
+            let op_left = operands.pop();
+            operands.push(AstNode::Binary { op, p1: Box::new(op_left.unwrap()), p2: Box::new(op_right.unwrap()) })
         }
     };
+
     return Result::Ok(operands.pop().unwrap());
 }
+
