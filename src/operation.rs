@@ -1,5 +1,3 @@
-use std::f64::consts::{E};
-
 use rug::Float;
 use rug::float::Constant;
 use rug::ops::Pow;
@@ -125,9 +123,9 @@ impl Operation {
             Operation::Log2 => op1.unwrap().log2(),
             Operation::Log10 => op1.unwrap().log10(),
             Operation::Pi => Float::with_val(64, Constant::Pi),
-            Operation::E => Float::with_val(64, E),
+            Operation::E => Float::with_val(64, 1).exp(),
             Operation::Exp => op1.unwrap().exp(),
-            Operation::Tombstone => return Result::Err(format!("Incalculable operation: {}", self.to_string())),
+            Operation::Tombstone => return Result::Err(format!("Internal AST error")),
         };
 
         return Result::Ok(result);
