@@ -1,4 +1,5 @@
 use regex::Regex;
+use rug::Float;
 
 use crate::operation::Operation;
 use crate::token::Token;
@@ -128,7 +129,9 @@ impl Context {
     }
 
     fn to_numeric_token(&self) -> Token {
-        return Token::Number { pos: self.pos, val: self.value.parse::<f64>().unwrap() };
+        let valid = Float::parse(&self.value);
+
+        return Token::Number { pos: self.pos, val: Float::with_val(64, valid.unwrap()) };
     }
 
     pub fn is_empty(&self) -> bool {

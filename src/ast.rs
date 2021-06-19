@@ -2,10 +2,11 @@ use std::fmt;
 
 use crate::operation::Operation;
 use crate::token::Token;
+use rug::Float;
 
 #[derive(Clone)]
 pub enum AstNode {
-    Number { val: f64 },
+    Number { val: Float },
     Unary { op: Operation, p1: Box<AstNode> },
     Binary { op: Operation, p1: Box<AstNode>, p2: Box<AstNode> },
 }
@@ -25,9 +26,9 @@ impl AstNode {
         };
     }
 
-    pub fn calculate(&self) -> Result<f64, String> {
+    pub fn calculate(&self) -> Result<Float, String> {
         return match self {
-            AstNode::Number { val } => Result::Ok(*val),
+            AstNode::Number { val } => Result::Ok(val.clone()),
             AstNode::Unary { op, p1 } => op.calculate(Some(p1.calculate()?), None),
             AstNode::Binary { op, p1, p2 } => op.calculate(Some(p1.calculate()?), Some(p2.calculate()?)),
         };
@@ -40,8 +41,8 @@ pub fn build_ast(tokens: &Vec<Token>) -> Result<AstNode, String> {
 
     for token in tokens {
         match token {
-            Token::Number { pos: _, val } => operands.push(AstNode::Number { val: *val }),
-            Token::VirtualZero { .. } => operands.push(AstNode::Number { val: 0f64 }),
+            Token::Number { pos: _, val } => operands.push(AstNode::Number { val: val.clone() }),
+            Token::VirtualZero { .. } => operands.push(AstNode::Number { val: Float::with_val(64, 0) }),
             Token::Open { .. } => stack.push(Operation::Tombstone),
             Token::Close { .. } => {
                 while !matches!(stack.last().unwrap(), Operation::Tombstone) {

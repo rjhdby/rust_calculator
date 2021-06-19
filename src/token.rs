@@ -2,13 +2,14 @@ use std::fmt;
 
 use crate::context::{Context, State};
 use crate::operation::Operation;
+use rug::Float;
 
 #[derive(Clone)]
 pub enum Token {
     WhiteSpace { pos: usize, val: String },
     Open { pos: usize },
     Close { pos: usize },
-    Number { pos: usize, val: f64 },
+    Number { pos: usize, val: Float },
     VirtualZero { pos: usize },
     Operation { pos: usize, val: Operation },
     Unknown { pos: usize, val: String },

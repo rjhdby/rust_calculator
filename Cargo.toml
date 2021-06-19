@@ -12,3 +12,7 @@ lazy_static = "1.4.0"
 clap = "3.0.0-beta.2"
 strum = "0.21"
 strum_macros = "0.21"
+[dependencies.rug]
+version = "1.6"
+default-features = false
+features = ["integer", "float", "rational"]

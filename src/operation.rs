@@ -1,5 +1,8 @@
-use std::f64::consts::{E, PI};
+use std::f64::consts::{E};
 
+use rug::Float;
+use rug::float::Constant;
+use rug::ops::Pow;
 use strum_macros::EnumIter;
 
 #[derive(Clone, EnumIter)]
@@ -16,6 +19,7 @@ pub enum Operation {
     Ln,
     Log2,
     Log10,
+    Exp,
 
     Pi,
     E,
@@ -40,6 +44,7 @@ impl Operation {
             Operation::Tombstone => "",
             Operation::Pi => "pi",
             Operation::E => "e",
+            Operation::Exp => "exp",
         }.to_string();
     }
 
@@ -67,6 +72,7 @@ impl Operation {
             Operation::Tombstone => 0,
             Operation::Pi => 5,
             Operation::E => 5,
+            Operation::Exp => 4,
         };
     }
 
@@ -86,6 +92,7 @@ impl Operation {
             "log10" => Operation::Log10,
             "pi" => Operation::Pi,
             "e" => Operation::E,
+            "exp" => Operation::Exp,
             _ => return Result::Err(())
         };
 
@@ -94,28 +101,33 @@ impl Operation {
 
     pub fn operands(&self) -> i8 {
         return match self {
-            Operation::Addition | Operation::Subtraction | Operation::Multiplication | Operation::Division | Operation::Product => 2,
+            Operation::Addition | Operation::Subtraction | Operation::Multiplication
+            | Operation::Division | Operation::Product => 2,
+
+            Operation::Sqrt | Operation::Sin | Operation::Cos
+            | Operation::Ln | Operation::Log2 | Operation::Log10 | Operation::Exp => 1,
+
             Operation::Pi | Operation::E | Operation::Tombstone => 0,
-            _ => 1
         };
     }
 
-    pub fn calculate(&self, op1: Option<f64>, op2: Option<f64>) -> Result<f64, String> {
+    pub fn calculate(&self, op1: Option<Float>, op2: Option<Float>) -> Result<Float, String> {
         let result = match self {
             Operation::Addition => op1.unwrap() + op2.unwrap(),
             Operation::Subtraction => op1.unwrap() - op2.unwrap(),
             Operation::Multiplication => op1.unwrap() * op2.unwrap(),
             Operation::Division => op1.unwrap() / op2.unwrap(),
-            Operation::Product => op1.unwrap().powf(op2.unwrap()),
+            Operation::Product => op1.unwrap().pow(op2.unwrap()),
             Operation::Sqrt => op1.unwrap().sqrt(),
             Operation::Sin => op1.unwrap().sin(),
             Operation::Cos => op1.unwrap().cos(),
             Operation::Ln => op1.unwrap().ln(),
             Operation::Log2 => op1.unwrap().log2(),
             Operation::Log10 => op1.unwrap().log10(),
-            Operation::Pi => PI,
-            Operation::E => E,
-            _ => return Result::Err(format!("Incalculable operation: {}", self.to_string()))
+            Operation::Pi => Float::with_val(64, Constant::Pi),
+            Operation::E => Float::with_val(64, E),
+            Operation::Exp => op1.unwrap().exp(),
+            Operation::Tombstone => return Result::Err(format!("Incalculable operation: {}", self.to_string())),
         };
 
         return Result::Ok(result);

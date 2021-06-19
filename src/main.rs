@@ -1,8 +1,8 @@
 #[macro_use]
 extern crate lazy_static;
+extern crate rug;
 
-use std::env;
-use std::io::{self, Read, stdout, Write};
+use std::io::{stdout, Write};
 use std::process::exit;
 
 use clap::{AppSettings, Clap};
