@@ -6,24 +6,20 @@ use std::io::{stdout, Write};
 use std::process::exit;
 
 use clap::{AppSettings, Clap};
-use strum::IntoEnumIterator;
+use crate::ast::{ExprCalculator};
+use rug::Float;
 
-use crate::ast::build_ast;
-use crate::operation::Operation;
-use crate::token::tokenize;
-
-mod operation;
-mod token;
-mod validator;
+mod lambdas;
 mod ast;
-mod context;
 
 #[derive(Clap)]
 #[clap(version = "0.1", author = "Andrey G. <rjhdbylive@gmail.com>")]
 #[clap(setting = AppSettings::ColoredHelp)]
 struct Opts {
     #[clap(short, long, about = "Calculate expression. \nE.g \"-10+sin(23)/(2e10 -1.3)\"", value_name = "expr")]
-    calculate: Option<String>,
+    float_calc: Option<String>,
+    #[clap(short, long, about = "Calculate boolean expression. \nE.g \"true | false ^ (true&!false)\"", value_name = "expr")]
+    bool_calc: Option<String>,
     #[clap(short, long, about = "Start interactive shell")]
     interactive: bool,
     #[clap(short, long, about = "Supported operations list")]
@@ -34,8 +30,10 @@ struct Opts {
 fn main() {
     let opts: Opts = Opts::parse();
 
-    if opts.calculate.is_some() {
-        calculate(&opts.calculate.unwrap())
+    if opts.float_calc.is_some() {
+        calculate(&opts.float_calc.unwrap())
+    } else if opts.bool_calc.is_some() {
+        calculate_bool(&opts.bool_calc.unwrap())
     } else if opts.list {
         print_operators()
     } else if opts.interactive {
@@ -50,6 +48,7 @@ fn main() {
                 "" => print_interactive_help(),
                 "exit" => exit(0),
                 "list" => print_operators(),
+                // it if it.starts_with("add") => ,
                 _ => calculate(&buffer)
             }
         }
@@ -60,9 +59,14 @@ fn main() {
 
 fn print_operators() {
     println!("Supported operations");
-    Operation::iter().for_each(
-        |it| println!("{}", it.pretty("x".to_string(), Option::Some("y".to_string())))
-    )
+    let calculator = ExprCalculator::<Float>::float_calculator();
+    for op in calculator.operations {
+        println!(
+            "{:<15} {}",
+            op.pretty("x".to_string(), Option::Some("y".to_string())),
+            op.description()
+        )
+    }
 }
 
 fn print_interactive_help() {
@@ -70,25 +74,33 @@ fn print_interactive_help() {
 }
 
 fn calculate(buffer: &str) {
-    let tokens = tokenize(&buffer);
-    if tokens.is_err() {
-        let err = &tokens.err().unwrap();
+
+    let calculator = ExprCalculator::<Float>::float_calculator();
+    let result = calculator.calculate(&buffer);
+
+    if result.is_err() {
+        let err = &result.err().unwrap();
         println!("{}", buffer);
         println!(" {:>1$}", "^", err.get_pos());
         println!("[syntax error] {}", err);
         return;
     }
-    let ast = build_ast(&tokens.ok().unwrap());
-    if ast.is_err() {
-        let err = &ast.err().unwrap();
+
+    println!("{}", result.ok().unwrap().to_string());
+}
+
+fn calculate_bool(buffer: &str) {
+
+    let calculator = ExprCalculator::<bool>::boolean_calculator();
+    let result = calculator.calculate(&buffer);
+
+    if result.is_err() {
+        let err = &result.err().unwrap();
+        println!("{}", buffer);
+        println!(" {:>1$}", "^", err.get_pos());
         println!("[syntax error] {}", err);
         return;
     }
-    let ast_result = ast.unwrap();
-    let result = ast_result.calculate();
-    if result.is_err() {
-        println!("[logic error] {}", &result.err().unwrap());
-        return;
-    }
-    println!("{}", result.unwrap().to_string());
+
+    println!("{}", result.ok().unwrap().to_string());
 }
