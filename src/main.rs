@@ -2,15 +2,20 @@
 extern crate lazy_static;
 extern crate rug;
 
+use std::fmt::Display;
 use std::io::{stdout, Write};
 use std::process::exit;
 
 use clap::{AppSettings, Clap};
-use crate::ast::{ExprCalculator};
-use rug::Float;
 
-mod lambdas;
+use crate::ast::{Token, ExprCalculator};
+
+mod operation_executor;
 mod ast;
+mod bool_calculator;
+mod float_calculator;
+mod tests;
+mod f64_calculator;
 
 #[derive(Clap)]
 #[clap(version = "0.1", author = "Andrey G. <rjhdbylive@gmail.com>")]
@@ -31,7 +36,7 @@ fn main() {
     let opts: Opts = Opts::parse();
 
     if opts.float_calc.is_some() {
-        calculate(&opts.float_calc.unwrap())
+        calculate_float(&opts.float_calc.unwrap())
     } else if opts.bool_calc.is_some() {
         calculate_bool(&opts.bool_calc.unwrap())
     } else if opts.list {
@@ -49,7 +54,7 @@ fn main() {
                 "exit" => exit(0),
                 "list" => print_operators(),
                 // it if it.starts_with("add") => ,
-                _ => calculate(&buffer)
+                _ => calculate_float(&buffer)
             }
         }
     } else {
@@ -59,12 +64,14 @@ fn main() {
 
 fn print_operators() {
     println!("Supported operations");
-    let calculator = ExprCalculator::<Float>::float_calculator();
+    let calculator = float_calculator::float_calculator();
+    println!("{:<15} {:<40} {:<15}", "Syntax", "Description", "Priority (higher value=higher priority)");
     for op in calculator.operations {
         println!(
-            "{:<15} {}",
-            op.pretty("x".to_string(), Option::Some("y".to_string())),
-            op.description()
+            "{:<15} {:<40} {:<15}",
+            op.pretty(),
+            op.description(),
+            op.priority()
         )
     }
 }
@@ -73,34 +80,28 @@ fn print_interactive_help() {
     println!("Type 'exit' for exit and 'list' for supported operations list.")
 }
 
-fn calculate(buffer: &str) {
+fn calculate_float(buffer: &str) {
+    calculate(buffer, float_calculator::float_calculator())
+}
 
-    let calculator = ExprCalculator::<Float>::float_calculator();
+fn calculate_bool(buffer: &str) {
+    calculate(buffer, bool_calculator::boolean_calculator())
+}
+
+fn calculate<T: 'static + Clone + Display>(buffer: &str, calculator: ExprCalculator<T>){
     let result = calculator.calculate(&buffer);
 
     if result.is_err() {
-        let err = &result.err().unwrap();
-        println!("{}", buffer);
-        println!(" {:>1$}", "^", err.get_pos());
-        println!("[syntax error] {}", err);
+        print_err(buffer, result);
         return;
     }
 
     println!("{}", result.ok().unwrap().to_string());
 }
 
-fn calculate_bool(buffer: &str) {
-
-    let calculator = ExprCalculator::<bool>::boolean_calculator();
-    let result = calculator.calculate(&buffer);
-
-    if result.is_err() {
-        let err = &result.err().unwrap();
-        println!("{}", buffer);
-        println!(" {:>1$}", "^", err.get_pos());
-        println!("[syntax error] {}", err);
-        return;
-    }
-
-    println!("{}", result.ok().unwrap().to_string());
+fn print_err<T: 'static + Clone + Display>(buffer: &str, result: Result<T, Token<T>>) {
+    let err = &result.err().unwrap();
+    println!("{}", buffer);
+    println!(" {:>1$}", "^", err.get_pos());
+    println!("[syntax error] {}", err.to_string());
 }

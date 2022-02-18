@@ -1,35 +1,26 @@
-use fmt::{Display, Formatter};
-use std::fmt;
-
-use regex::Regex;
-use rug::Float;
-use rug::float::Constant;
-use rug::ops::Pow;
-
-use crate::lambdas::{BinaryCalculator, Calculator, UnaryCalculator};
+use crate::operation_executor::{BinaryOperationExecutor, OperationExecutor, UnaryoperationExecutor};
 
 pub struct ExprCalculator<T: Clone> {
-    pub operations: Vec<Operation<T>>,
-    handler: Box<dyn PrimitiveHandler<T>>,
+    pub(crate) operations: Vec<Operation<T>>,
+    pub(crate) handler: Box<dyn PrimitiveHandler<T>>,
 }
 
 #[derive(Clone)]
 #[derive(PartialEq)]
 pub enum OperationType {
     Constant,
-    UnaryPrefix,
-    UnaryPostfix,
-    BinaryInfix,
+    Prefix,
+    Postfix,
+    Infix,
     Function,
 }
-
 pub struct Operation<T: Clone> {
     signature: String,
     description: String,
     op_type: OperationType,
-    operands: i8,
-    priority: i8,
-    calculate: Box<dyn Calculator<T>>,
+    operands: u8,
+    priority: u8,
+    calculate: Box<dyn OperationExecutor<T>>,
 }
 
 impl<T: 'static + Clone> Clone for Operation<T> {
@@ -48,55 +39,13 @@ impl<T: 'static + Clone> Clone for Operation<T> {
 pub trait PrimitiveHandler<T> {
     fn from_string(&self, input: &String) -> Result<T, ()>;
     fn can_start_with(&self, input: String) -> bool;
-    fn to_string(&self, input: T) -> String;
-}
-
-struct FloatHandler {}
-
-impl PrimitiveHandler<Float> for FloatHandler {
-    fn from_string(&self, input: &String) -> Result<Float, ()> {
-        let valid = Float::parse(input);
-        if valid.is_err() {
-            return Result::Err(());
-        }
-
-        return Result::Ok(Float::with_val(64, valid.unwrap()));
-    }
-
-    fn can_start_with(&self, input: String) -> bool {
-        return PRIMITIVE_INCOMPLETE_1.is_match(&input) || PRIMITIVE_INCOMPLETE_2.is_match(&input);
-    }
-
-    fn to_string(&self, input: Float) -> String {
-        todo!()
-    }
-}
-
-struct BoolHandler {}
-
-impl PrimitiveHandler<bool> for BoolHandler {
-    fn from_string(&self, input: &String) -> Result<bool, ()> {
-        return match input.to_lowercase().as_str() {
-            "true" => Result::Ok(true),
-            "false" => Result::Ok(false),
-            _ => Result::Err(()),
-        };
-    }
-
-    fn can_start_with(&self, input: String) -> bool {
-        return "true".starts_with(&input) || "false".starts_with(&input);
-    }
-
-    fn to_string(&self, input: bool) -> String {
-        todo!()
-    }
 }
 
 pub enum Token<T: Clone> {
     WhiteSpace { pos: usize, val: String },
     Open { pos: usize },
     Close { pos: usize },
-    Primitive { pos: usize, val: T },
+    Primitive { pos: usize, val: T, original: String },
     Operation { pos: usize, val: Box<Operation<T>> },
     Unknown { pos: usize, val: String },
 }
@@ -107,7 +56,7 @@ impl<T: 'static + Clone> Clone for Token<T> {
             Token::WhiteSpace { pos, val } => Token::WhiteSpace { pos: *pos, val: val.clone() },
             Token::Open { pos } => Token::Open { pos: *pos },
             Token::Close { pos } => Token::Close { pos: *pos },
-            Token::Primitive { pos, val } => Token::Primitive { pos: *pos, val: val.clone() },
+            Token::Primitive { pos, val, original } => Token::Primitive { pos: *pos, val: val.clone(), original: original.clone() },
             Token::Operation { pos, val } => Token::Operation { pos: *pos, val: val.clone() },
             Token::Unknown { pos, val } => Token::Unknown { pos: *pos, val: val.clone() },
         };
@@ -156,139 +105,13 @@ impl<T: 'static + Clone> Clone for Context<T> {
     }
 }
 
-impl<T: 'static + Clone> ExprCalculator<T> {
-    const ADD_SUB_ORDER: i8 = 1;
-    const MUL_DIV_ORDER: i8 = 2;
-    const FUNCTION_ORDER: i8 = 3;
-    const CONSTANT_ORDER: i8 = 4;
-}
+pub const LOWEST_ORDER: u8 = 10;
+pub const LOW_ORDER: u8 = 20;
+pub const MEDIUM_ORDER: u8 = 30;
+pub const HIGH_ORDER: u8 = 40;
+pub const HIGHEST_ORDER: u8 = 50;
 
 impl<T: 'static + Clone> ExprCalculator<T> {
-    pub fn boolean_calculator() -> ExprCalculator<bool> {
-        let mut result = ExprCalculator::<bool> {
-            operations: Vec::new(),
-            handler: Box::new(BoolHandler {}),
-        };
-
-        result.add_binary_low_order(
-            "|".to_lowercase(),
-            "OR".to_string(),
-            Box::new(|op1, op2| { op1 | op2 }),
-        );
-
-        result.add_binary_low_order(
-            "&".to_lowercase(),
-            "AND".to_string(),
-            Box::new(|op1, op2| { op1 & op2 }),
-        );
-
-        result.add_binary_low_order(
-            "^".to_lowercase(),
-            "XOR".to_string(),
-            Box::new(|op1, op2| { op1 ^ op2 }),
-        );
-
-        result.add_unary_prefix(
-            "!".to_lowercase(),
-            "NOT".to_string(),
-            Box::new(|op1| { !op1 }),
-        );
-
-        return result;
-    }
-
-    pub fn float_calculator() -> ExprCalculator<Float> {
-        let mut result = ExprCalculator::<Float> {
-            operations: Vec::new(),
-            handler: Box::new(FloatHandler {}),
-        };
-
-        result.add_unary_prefix(
-            "-".to_ascii_lowercase(),
-            "Negation".to_string(),
-            Box::new(|op1| { -op1.clone() }),
-        );
-        result.add_unary_postfix(
-            "!".to_ascii_lowercase(),
-            "Factorial".to_string(),
-            Box::new(|op1| { Float::with_val(64, Float::factorial((op1 as Float).to_u32_saturating().unwrap())) }),
-        );
-
-        result.add_binary_low_order(
-            "+".to_ascii_lowercase(),
-            "Addition".to_string(),
-            Box::new(|op1, op2| { op1 + op2.clone() }),
-        );
-        result.add_binary_low_order(
-            "-".to_ascii_lowercase(),
-            "Subtraction".to_string(),
-            Box::new(|op1, op2| { op1 - op2.clone() }),
-        );
-        result.add_binary_high_order(
-            "*".to_ascii_lowercase(),
-            "Multiplication".to_string(),
-            Box::new(|op1, op2| { op1 * op2.clone() }),
-        );
-        result.add_binary_high_order(
-            "/".to_ascii_lowercase(),
-            "Division".to_string(),
-            Box::new(|op1, op2| { op1 / op2.clone() }),
-        );
-        result.add_binary(
-            "^".to_ascii_lowercase(),
-            "Product".to_string(),
-            Box::new(|op1, op2| { op1.pow(op2.clone()) }),
-            ExprCalculator::<T>::FUNCTION_ORDER,
-        );
-        result.add_function(
-            "sqrt".to_string(),
-            "Square root".to_string(),
-            Box::new(|op1| { op1.clone().sqrt() }),
-        );
-        result.add_function(
-            "sin".to_string(),
-            "Sine".to_string(),
-            Box::new(|op1| { op1.clone().sin() }),
-        );
-        result.add_function(
-            "cos".to_string(),
-            "Cosine".to_string(),
-            Box::new(|op1| { op1.clone().cos() }),
-        );
-        result.add_function(
-            "ln".to_string(),
-            "Natural logarithm".to_string(),
-            Box::new(|op1| { op1.clone().ln() }),
-        );
-        result.add_function(
-            "log10".to_string(),
-            "Common logarithm".to_string(),
-            Box::new(|op1| { op1.clone().log10() }),
-        );
-        result.add_function(
-            "log2".to_string(),
-            "Binary logarithm".to_string(),
-            Box::new(|op1| { op1.clone().log2() }),
-        );
-        result.add_function(
-            "exp".to_string(),
-            "Exponent".to_string(),
-            Box::new(|op1| { op1.clone().exp() }),
-        );
-        result.add_constant(
-            "pi".to_string(),
-            "Constant 𝜋=3.1415...".to_string(),
-            Float::with_val(64, Constant::Pi),
-        );
-        result.add_constant(
-            "e".to_string(),
-            "Constant e=2.7182....".to_string(),
-            Float::with_val(64, 1).exp(),
-        );
-
-        return result;
-    }
-
     pub fn new(handler: Box<dyn PrimitiveHandler<T>>) -> ExprCalculator<T> {
         return ExprCalculator {
             operations: Vec::<Operation<T>>::new(),
@@ -296,24 +119,59 @@ impl<T: 'static + Clone> ExprCalculator<T> {
         };
     }
 
-    pub fn add_unary_prefix(&mut self, signature: String, description: String, calculate: Box<dyn UnaryCalculator<T>>) {
+    pub fn add(
+        &mut self,
+        signature: String,
+        description: String,
+        op_type: OperationType,
+        calculate: Box<dyn OperationExecutor<T>>,
+        operands: u8,
+        order: u8,
+    ) {
         self.operations.push(Operation {
             signature,
             description,
-            op_type: OperationType::UnaryPrefix,
-            operands: 1,
-            priority: ExprCalculator::<T>::CONSTANT_ORDER,
-            calculate: Box::new(move |operands| { calculate(operands[0].clone()) }),
+            op_type,
+            operands,
+            priority: order,
+            calculate,
         });
     }
 
-    pub fn add_unary_postfix(&mut self, signature: String, description: String, calculate: Box<dyn UnaryCalculator<T>>) {
+    pub fn add_prefix(
+        &mut self,
+        signature: String,
+        description: String,
+        calculate: Box<dyn UnaryoperationExecutor<T>>,
+        order: u8,
+    ) {
+        self.add_unary(signature, description, calculate, OperationType::Prefix, order);
+    }
+
+    pub fn add_postfix(
+        &mut self,
+        signature: String,
+        description: String,
+        calculate: Box<dyn UnaryoperationExecutor<T>>,
+        order: u8,
+    ) {
+        self.add_unary(signature, description, calculate, OperationType::Postfix, order);
+    }
+
+    fn add_unary(
+        &mut self,
+        signature: String,
+        description: String,
+        calculate: Box<dyn UnaryoperationExecutor<T>>,
+        op_type: OperationType,
+        order: u8,
+    ) {
         self.operations.push(Operation {
             signature,
             description,
-            op_type: OperationType::UnaryPostfix,
+            op_type,
             operands: 1,
-            priority: ExprCalculator::<T>::CONSTANT_ORDER,
+            priority: order,
             calculate: Box::new(move |operands| { calculate(operands[0].clone()) }),
         });
     }
@@ -324,35 +182,33 @@ impl<T: 'static + Clone> ExprCalculator<T> {
             description,
             op_type: OperationType::Constant,
             operands: 0,
-            priority: ExprCalculator::<T>::CONSTANT_ORDER,
+            priority: u8::MAX,
             calculate: Box::new(move |_| { value.clone() }),
         });
     }
 
-    pub fn add_function(&mut self, signature: String, description: String, calculate: Box<dyn UnaryCalculator<T>>) {
+    pub fn add_one_argument_function(
+        &mut self,
+        signature: String,
+        description: String,
+        calculate: Box<dyn UnaryoperationExecutor<T>>,
+        order: u8,
+    ) {
         self.operations.push(Operation {
             signature,
             description,
             op_type: OperationType::Function,
             operands: 1,
-            priority: ExprCalculator::<T>::FUNCTION_ORDER,
+            priority: order,
             calculate: Box::new(move |operands| { calculate(operands[0].clone()) }),
         });
     }
 
-    pub fn add_binary_high_order(&mut self, signature: String, description: String, calculate: Box<dyn BinaryCalculator<T>>) {
-        self.add_binary(signature, description, calculate, ExprCalculator::<T>::MUL_DIV_ORDER)
-    }
-
-    pub fn add_binary_low_order(&mut self, signature: String, description: String, calculate: Box<dyn BinaryCalculator<T>>) {
-        self.add_binary(signature, description, calculate, ExprCalculator::<T>::ADD_SUB_ORDER)
-    }
-
-    fn add_binary(&mut self, signature: String, description: String, calculate: Box<dyn BinaryCalculator<T>>, order: i8) {
+    pub fn add_infix(&mut self, signature: String, description: String, calculate: Box<dyn BinaryOperationExecutor<T>>, order: u8) {
         self.operations.push(Operation {
             signature,
             description,
-            op_type: OperationType::BinaryInfix,
+            op_type: OperationType::Infix,
             operands: 2,
             priority: order,
             calculate: Box::new(move |operands| { calculate(operands[0].clone(), operands[1].clone()) }),
@@ -363,26 +219,13 @@ impl<T: 'static + Clone> ExprCalculator<T> {
 impl<T: 'static + Clone> ExprCalculator<T> {
     pub fn calculate(&self, input: &str) -> Result<T, Token<T>> {
         let tokens = self.tokenize(input)?;
-        println!("TOKENIZED");
         let ast = self.build_ast(&tokens)?;
-        println!("ASTED");
         let result = ast.calculate();
-        println!("CALCULATED");
 
         return Result::Ok(result.ok().unwrap().clone());
     }
 
-    pub fn make_not_unary_operation(&self, value: String) -> Option<&Operation<T>> {
-        for operation in self.operations.iter() {
-            if operation.signature == value && operation.op_type != OperationType::UnaryPrefix {
-                return Option::Some(&operation);
-            }
-        }
-
-        return None;
-    }
-
-    pub(crate) fn can_be_operation(&self, text: &String) -> bool {
+    fn can_be_operation(&self, text: &String) -> bool {
         for operation in self.operations.iter() {
             if operation.signature.starts_with(text) {
                 return true;
@@ -392,9 +235,9 @@ impl<T: 'static + Clone> ExprCalculator<T> {
         return false;
     }
 
-    pub fn make_by_type(&self, value: String, op_type: OperationType) -> Option<&Operation<T>> {
+    fn make_by_type(&self, value: &String, op_type: OperationType) -> Option<&Operation<T>> {
         for operation in self.operations.iter() {
-            if operation.signature == value && operation.op_type == op_type {
+            if operation.signature == *value && operation.op_type == op_type {
                 return Option::Some(&operation);
             }
         }
@@ -435,10 +278,17 @@ impl<T: 'static + Clone> ExprCalculator<T> {
 
         for token in tokens {
             match token {
-                Token::Primitive { pos: _, val } => operands.push(AstNode::Primitive { val: val.clone(), token: token.clone() }),
+                Token::Primitive { pos: _pos, val, .. } => operands.push(AstNode::Primitive { val: val.clone(), token: token.clone() }),
                 Token::Open { .. } => stack.push(token.clone()),
                 Token::Close { .. } => {
-                    while !matches!(stack.last().unwrap(), Token::Open {..}) {
+                    loop {
+                        let last = stack.last();
+                        if last.is_none() {
+                            return Result::Err(token.clone());
+                        }
+                        if matches!(stack.last().unwrap(), Token::Open {..}) {
+                            break;
+                        }
                         self.make_node(&mut operands, stack.pop().unwrap())?;
                     };
                     stack.pop();
@@ -450,7 +300,7 @@ impl<T: 'static + Clone> ExprCalculator<T> {
                             Token::Open { .. } => break,
                             _ => return Result::Err(stack.last().unwrap().clone())
                         };
-                        if last_op.priority < val.priority {
+                        if last_op.priority <= val.priority {
                             break;
                         }
                         self.make_node(&mut operands, stack.pop().unwrap())?;
@@ -490,53 +340,49 @@ impl<T: 'static + Clone> ExprCalculator<T> {
     }
 }
 
-impl<T: 'static + Clone + Display> Display for Token<T> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let str = match self {
+impl<T: 'static + Clone> Token<T> {
+    pub fn to_string(&self) -> String {
+        return match self {
             Token::WhiteSpace { pos, val } => format!("'{}' at position {}", val, pos),
             Token::Open { pos } => format!("'(' at position {}", pos),
             Token::Close { pos } => format!("')' at position {}", pos),
-            Token::Primitive { pos, val } => format!("'{}' at position {}", val, pos),
+            Token::Primitive { pos, val: _val, original } => format!("'{}' at position {}", original, pos),
             Token::Operation { pos, val } => format!("'{}' at position {}", val.signature.to_string(), pos),
             Token::Unknown { pos, val } => format!("'{}' at position {}", val, pos),
         };
-        write!(f, "{}", str)
     }
 }
 
 impl<T: 'static + Clone> Token<T> {
     pub fn get_pos(&self) -> usize {
         return match self {
-            Token::WhiteSpace { pos, val: _val } => *pos,
+            Token::WhiteSpace { pos, .. } => *pos,
             Token::Open { pos } => *pos,
             Token::Close { pos } => *pos,
-            Token::Primitive { pos, val: _val } => *pos,
-            Token::Operation { pos, val: _val } => *pos,
-            Token::Unknown { pos, val: _val } => *pos,
+            Token::Primitive { pos, .. } => *pos,
+            Token::Operation { pos, .. } => *pos,
+            Token::Unknown { pos, .. } => *pos,
+        };
+    }
+
+    pub fn get_value(&self) -> String {
+        return match self {
+            Token::WhiteSpace { pos: _pos, val } => val.clone(),
+            Token::Open { .. } => "(".to_string(),
+            Token::Close { .. } => ")".to_string(),
+            Token::Primitive { pos: _pos, val: _val, original } => original.clone(),
+            Token::Operation { pos: _pos, val } => val.signature.clone(),
+            Token::Unknown { pos: _pos, val } => val.clone()
         };
     }
 }
 
-// impl<T: 'static + Clone> Display for AstNode<T> {
-//     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-//         write!(f, "{}", self.to_string())
-//     }
-// }
-
 impl<T: 'static + Clone> AstNode<T> {
-    // pub fn to_string(&self) -> String {
-    //     return match self {
-    //         AstNode::Primitive { val, token: _ } => val.to_string(),
-    //         AstNode::Unary { op, p1, token: _ } => op.pretty(p1.to_string(), None),
-    //         AstNode::Binary { op, p1, p2, token: _ } => op.pretty(p1.to_string(), Some(p2.to_string())),
-    //     };
-    // }
-
-    pub fn calculate(&self) -> Result<T, Token<T>> {
+    fn calculate(&self) -> Result<T, Token<T>> {
         let result = match self {
-            AstNode::Primitive { val, token: _ } => val.clone(),
-            AstNode::Unary { op, p1, token: _ } => (&op.calculate)(vec![p1.calculate()?]),
-            AstNode::Binary { op, p1, p2, token: _ } => (&op.calculate)(vec![p1.calculate()?, p2.calculate()?]),
+            AstNode::Primitive { val, .. } => val.clone(),
+            AstNode::Unary { op, p1, .. } => (&op.calculate)(vec![p1.calculate()?]),
+            AstNode::Binary { op, p1, p2, .. } => (&op.calculate)(vec![p1.calculate()?, p2.calculate()?]),
         };
 
         return Result::Ok(result);
@@ -548,7 +394,7 @@ impl<T: 'static + Clone> Context<T> {
         return Context { out: Vec::new(), state: State::Empty, value: String::new(), pos: 0 };
     }
 
-    pub fn get_tokens(&self) -> &Vec<Token<T>> {
+    fn get_tokens(&self) -> &Vec<Token<T>> {
         return &self.out;
     }
 
@@ -568,19 +414,26 @@ impl<T: 'static + Clone> Context<T> {
         return Result::Ok(());
     }
 
-    pub fn collect_token(&mut self, expr_calculator: &ExprCalculator<T>) -> Result<(), Token<T>> {
+    fn collect_token(&mut self, expr_calculator: &ExprCalculator<T>) -> Result<(), Token<T>> {
         let token = match self.state {
-            State::Operation => if self.suitable_for_unary_prefix(self.value.clone(), expr_calculator) {
-                let operation = expr_calculator.make_by_type(self.value.clone(), OperationType::UnaryPrefix);
-                Token::Operation { pos: self.pos, val: Box::new(operation.unwrap().clone()) }
-            } else if self.suitable_for_unary_postfix(self.value.clone(), expr_calculator) {
-                let operation = expr_calculator.make_by_type(self.value.clone(), OperationType::UnaryPostfix);
-                Token::Operation { pos: self.pos, val: Box::new(operation.unwrap().clone()) }
-            } else {
-                let operation = expr_calculator.make_not_unary_operation(self.value.clone());
-                if operation.is_none() {
+            State::Operation => {
+                let op = self.value.clone();
+                let op_type = if self.suitable_for_prefix(&op, expr_calculator) {
+                    OperationType::Prefix
+                } else if self.suitable_for_postfix(&op, expr_calculator) {
+                    OperationType::Postfix
+                } else if self.suitable_for_infix(&op, expr_calculator) {
+                    OperationType::Infix
+                } else if self.suitable_for_function(&op, expr_calculator) {
+                    OperationType::Function
+                } else if expr_calculator.make_by_type(&op, OperationType::Constant).is_some() {
+                    OperationType::Constant
+                } else {
                     return Result::Err(Token::Unknown { pos: self.pos, val: self.value.clone() });
-                }
+                };
+
+                let operation = expr_calculator.make_by_type(&op, op_type);
+
                 Token::Operation { pos: self.pos, val: Box::new(operation.unwrap().clone()) }
             }
             State::WhiteSpace => self.to_whitespace_token(),
@@ -593,9 +446,6 @@ impl<T: 'static + Clone> Context<T> {
     }
 
     fn add_token(&mut self, token: Token<T>) -> Result<(), Token<T>> {
-        // if !self.validate(&self.take_last(), &token) {
-        //     return Result::Err(token);
-        // }
         self.out.push(token);
 
         return Result::Ok(());
@@ -642,25 +492,25 @@ impl<T: 'static + Clone> Context<T> {
         };
     }
 
-    pub fn init_whitespace(&mut self, pos: usize) {
+    fn init_whitespace(&mut self, pos: usize) {
         self.state = State::WhiteSpace;
         self.value = String::from(' ');
         self.pos = pos;
     }
 
-    pub fn init_primitive(&mut self, val: char, pos: usize) {
+    fn init_primitive(&mut self, val: char, pos: usize) {
         self.state = State::Primitive;
         self.value = String::from(val);
         self.pos = pos;
     }
 
-    pub fn init_operation(&mut self, val: char, pos: usize) {
+    fn init_operation(&mut self, val: char, pos: usize) {
         self.state = State::Operation;
         self.value = String::from(val);
         self.pos = pos;
     }
 
-    pub fn add_symbol(&mut self, symbol: char) {
+    fn add_symbol(&mut self, symbol: char) {
         self.value.push(symbol)
     }
 
@@ -675,20 +525,16 @@ impl<T: 'static + Clone> Context<T> {
             return Result::Err(Token::Unknown { pos: self.pos, val: self.value.clone() });
         }
 
-        return Result::Ok(Token::Primitive { pos: self.pos, val: val.unwrap() });
+        return Result::Ok(Token::Primitive { pos: self.pos, val: val.unwrap(), original: self.value.clone() });
     }
 
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         return self.value.is_empty();
     }
 
-    pub fn suitable_for_unary_prefix(&self, value: String, expr_calculator: &ExprCalculator<T>) -> bool {
-        if expr_calculator.make_by_type(value, OperationType::UnaryPrefix).is_none() {
+    fn suitable_for_prefix(&self, value: &String, expr_calculator: &ExprCalculator<T>) -> bool {
+        if expr_calculator.make_by_type(value, OperationType::Prefix).is_none() {
             return false;
-        }
-
-        if self.out.is_empty() {
-            return true;
         }
 
         let last = self.take_last();
@@ -698,16 +544,16 @@ impl<T: 'static + Clone> Context<T> {
 
         return match last.unwrap() {
             Token::Open { .. } => true,
+            Token::Operation { pos: _pos, val } => match val.op_type {
+                OperationType::Constant => false,
+                _ => true
+            }
             _ => false
         };
     }
 
-    pub fn suitable_for_unary_postfix(&self, value: String, expr_calculator: &ExprCalculator<T>) -> bool {
-        if expr_calculator.make_by_type(value, OperationType::UnaryPostfix).is_none() {
-            return false;
-        }
-
-        if self.out.is_empty() {
+    fn suitable_for_postfix(&self, value: &String, expr_calculator: &ExprCalculator<T>) -> bool {
+        if expr_calculator.make_by_type(value, OperationType::Postfix).is_none() {
             return false;
         }
 
@@ -716,31 +562,84 @@ impl<T: 'static + Clone> Context<T> {
             return false;
         }
 
-        return match self.out.last().unwrap() {
+        return match last.unwrap() {
             Token::Close { .. } => true,
             Token::Primitive { .. } => true,
-            Token::Operation { pos: _pos, val } => return val.op_type == OperationType::Constant,
-            _ => true
+            Token::Operation { pos: _pos, val } => match val.op_type {
+                OperationType::Constant | OperationType::Postfix => true,
+                _ => false
+            }
+            _ => false
+        };
+    }
+
+    fn suitable_for_infix(&self, value: &String, expr_calculator: &ExprCalculator<T>) -> bool {
+        if expr_calculator.make_by_type(value, OperationType::Infix).is_none() {
+            return false;
+        }
+
+        let last = self.take_last();
+        if last.is_none() {
+            return false;
+        }
+
+        return match last.unwrap() {
+            Token::Close { .. } => true,
+            Token::Primitive { .. } => true,
+            Token::Operation { pos: _pos, val } => match val.op_type {
+                OperationType::Constant | OperationType::Postfix => true,
+                _ => false
+            }
+            _ => false
+        };
+    }
+
+    fn suitable_for_function(&self, value: &String, expr_calculator: &ExprCalculator<T>) -> bool {
+        if expr_calculator.make_by_type(value, OperationType::Function).is_none() {
+            return false;
+        }
+
+        let last = self.take_last();
+        if last.is_none() {
+            return true;
+        }
+
+        return match last.unwrap() {
+            Token::Open { .. } => true,
+            Token::Operation { pos: _pos, val } => match val.op_type {
+                OperationType::Infix | OperationType::Prefix => true,
+                _ => false
+            },
+            _ => false
         };
     }
 }
 
 impl<T: 'static + Clone> Operation<T> {
-    pub fn pretty(&self, op1: String, op2: Option<String>) -> String {
-        return match self {
-            it if it.operands == 2 => format!("({}{}{})", op1, self.signature, op2.unwrap()),
-            it if it.operands == 1 => format!("{}({})", self.signature, op1),
-            _ => self.signature.clone(),
+    pub fn pretty(&self) -> String {
+        return match self.op_type.clone() {
+            OperationType::Constant => self.signature.clone(),
+            OperationType::Prefix => format!("{}x", &self.signature),
+            OperationType::Postfix => format!("x{}", &self.signature),
+            OperationType::Infix => format!("x{}y", &self.signature),
+            OperationType::Function => format!(
+                "{}({})",
+                &self.signature,
+                vec!["x", "y", "z", "a", "b", "c", "..."]
+                    .iter()
+                    .take(usize::from(self.operands))
+                    .map(|it| { it.to_string() })
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ),
         };
     }
 
     pub fn description(&self) -> String {
         return self.description.clone();
     }
-}
 
-lazy_static! {
-    // static ref EXP: Regex = Regex::new(r"^-?(\d+|\d+\.\d+)[eE][-+]?\d+$").unwrap();
-    static ref PRIMITIVE_INCOMPLETE_1: Regex = Regex::new(r"^(\d+|\d+\.\d*)$").unwrap();
-    static ref PRIMITIVE_INCOMPLETE_2: Regex = Regex::new(r"^(\d+|\d+\.\d+)[eE][-+]?\d*$").unwrap();
+    pub fn priority(&self) -> u8 {
+        return self.priority;
+    }
 }
